@@ -3,3 +3,4 @@ build/
 dist/
 *.spec
 .venv/
+historial_tareas.csv

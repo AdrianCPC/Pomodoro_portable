@@ -7,16 +7,141 @@ import os
 from datetime import datetime
 from timer_logic import PomodoroTimer
 
+# Matplotlib
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.pyplot as plt
+
 # Configure CustomTkinter
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
+
+class ReportWindow(ctk.CTkToplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("Reportes de Trabajo")
+        self.geometry("600x450")
+        
+        # Prevent opening multiple report windows by keeping focus
+        self.grab_set()
+
+        self.filter_var = ctk.StringVar(value="Diario")
+        self.filter_seg_btn = ctk.CTkSegmentedButton(
+            self, 
+            values=["Diario", "Semanal", "Mensual"],
+            variable=self.filter_var,
+            command=self.update_chart
+        )
+        self.filter_seg_btn.pack(pady=20)
+        
+        self.chart_frame = ctk.CTkFrame(self)
+        self.chart_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+        
+        self.figure, self.ax = plt.subplots(figsize=(6, 4))
+        # Style chart for dark mode
+        self.figure.patch.set_facecolor('#2b2b2b')
+        self.ax.set_facecolor('#2b2b2b')
+        self.ax.tick_params(colors='white')
+        self.ax.yaxis.label.set_color('white')
+        self.ax.xaxis.label.set_color('white')
+        self.ax.spines['bottom'].set_color('white')
+        self.ax.spines['top'].set_color('#2b2b2b')
+        self.ax.spines['right'].set_color('#2b2b2b')
+        self.ax.spines['left'].set_color('white')
+        
+        self.canvas = FigureCanvasTkAgg(self.figure, master=self.chart_frame)
+        self.canvas.get_tk_widget().pack(fill="both", expand=True)
+        
+        self.update_chart(self.filter_var.get())
+
+        # Bind closing to release grab
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+
+    def on_close(self):
+        self.grab_release()
+        self.destroy()
+        
+    def parse_data(self):
+        data = []
+        file_path = "historial_tareas.csv"
+        if not os.path.exists(file_path):
+            return data
+            
+        with open(file_path, mode='r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    dt = datetime.strptime(row["Fecha"], "%Y-%m-%d %H:%M:%S")
+                    work_mins = int(row["Minutos Trabajo"])
+                    data.append({"date": dt, "work_mins": work_mins})
+                except Exception:
+                    continue
+        return data
+
+    def update_chart(self, filter_type):
+        data = self.parse_data()
+        self.ax.clear()
+
+        # Check if data exists
+        if not data:
+            self.ax.text(0.5, 0.5, 'No hay datos suficientes', color='white', ha='center')
+            self.canvas.draw()
+            return
+
+        # Simple aggregation dict
+        agg = {}
+        for d in data:
+            dt = d["date"]
+            val = d["work_mins"]
+            if filter_type == "Diario":
+                key = dt.strftime("%Y-%m-%d")
+            elif filter_type == "Semanal":
+                key = dt.strftime("%Y-W%W")
+            elif filter_type == "Mensual":
+                key = dt.strftime("%Y-%m")
+            
+            agg[key] = agg.get(key, 0) + val
+
+        keys = sorted(agg.keys())
+        values = [agg[k] for k in keys]
+
+        if filter_type == "Diario":
+            keys = keys[-7:]
+            values = values[-7:]
+            x_labels = [datetime.strptime(k, "%Y-%m-%d").strftime("%d %b") for k in keys]
+        elif filter_type == "Semanal":
+            keys = keys[-4:]
+            values = values[-4:]
+            x_labels = keys
+        elif filter_type == "Mensual":
+            keys = keys[-12:]
+            values = values[-12:]
+            x_labels = [datetime.strptime(k, "%Y-%m").strftime("%b '%y") for k in keys]
+            
+        # Draw bars
+        bars = self.ax.bar(x_labels, values, color='#1f538d') # ctk blue-ish
+        
+        # Add values on top of bars
+        for bar in bars:
+            height = bar.get_height()
+            self.ax.annotate(f'{height}',
+                xy=(bar.get_x() + bar.get_width() / 2, height),
+                xytext=(0, 3),  # 3 points vertical offset
+                textcoords="offset points",
+                ha='center', va='bottom', color='white')
+
+        self.ax.set_ylabel("Minutos de Trabajo")
+        self.ax.set_title(f"Tiempo de Enfoque ({filter_type})", color='white')
+        self.figure.autofmt_xdate()
+        
+        self.canvas.draw()
+
 
 class PomodoroApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
         self.title("Pomodoro-Portable")
-        self.geometry("400x550")
+        self.geometry("400x580")
         self.resizable(False, False)
 
         # Task tracking variables
@@ -72,7 +197,7 @@ class PomodoroApp(ctk.CTk):
         # --- Task Tracking UI ---
         # Separator line
         self.separator = ctk.CTkFrame(self, height=2)
-        self.separator.pack(fill="x", padx=20, pady=15)
+        self.separator.pack(fill="x", padx=20, pady=10)
         
         self.task_frame = ctk.CTkFrame(self)
         self.task_frame.pack(pady=5, padx=20, fill="x")
@@ -84,16 +209,20 @@ class PomodoroApp(ctk.CTk):
         self.task_entry.pack(pady=5)
 
         self.task_buttons_frame = ctk.CTkFrame(self.task_frame, fg_color="transparent")
-        self.task_buttons_frame.pack(pady=(5, 10))
+        self.task_buttons_frame.pack(pady=(5, 5))
 
-        self.action_task_btn = ctk.CTkButton(self.task_buttons_frame, text="Iniciar Tarea", command=self.toggle_task, width=100)
+        self.action_task_btn = ctk.CTkButton(self.task_buttons_frame, text="Iniciar Tarea", command=self.toggle_task, width=90)
         self.action_task_btn.pack(side="left", padx=5)
 
-        self.edit_task_btn = ctk.CTkButton(self.task_buttons_frame, text="Editar", command=self.edit_task, width=60, state="disabled")
+        self.edit_task_btn = ctk.CTkButton(self.task_buttons_frame, text="Editar", command=self.edit_task, width=50, state="disabled")
         self.edit_task_btn.pack(side="left", padx=5)
 
         self.finish_task_btn = ctk.CTkButton(self.task_buttons_frame, text="Finalizar", command=self.finish_task, width=80, state="disabled")
         self.finish_task_btn.pack(side="left", padx=5)
+
+        # Report Button
+        self.report_btn = ctk.CTkButton(self.task_frame, text="Ver Reportes (Gráficos)", fg_color="#4158D0", command=self.show_reports)
+        self.report_btn.pack(pady=(5, 15))
 
 
     def on_time_change(self, value):
@@ -193,7 +322,10 @@ class PomodoroApp(ctk.CTk):
 
         # Show popup
         import tkinter.messagebox as messagebox
-        messagebox.showinfo("Reporte de Tarea", report_msg)
+        messagebox.showinfo("Reporte de Tarea Finalizada", report_msg)
+
+        # Automatic timer reset
+        self.reset_timer()
 
         # Reset task state
         self.active_task_name = None
@@ -207,6 +339,9 @@ class PomodoroApp(ctk.CTk):
         self.action_task_btn.configure(state="normal", text="Iniciar Tarea")
         self.edit_task_btn.configure(state="disabled")
         self.finish_task_btn.configure(state="disabled")
+
+    def show_reports(self):
+        ReportWindow(self)
 
     # --- Timer Thread Controls ---
     def run_timer(self):
