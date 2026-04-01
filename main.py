@@ -2,6 +2,9 @@ import customtkinter as ctk
 import threading
 import time
 import winsound
+import csv
+import os
+from datetime import datetime
 from timer_logic import PomodoroTimer
 
 # Configure CustomTkinter
@@ -13,8 +16,13 @@ class PomodoroApp(ctk.CTk):
         super().__init__()
 
         self.title("Pomodoro-Portable")
-        self.geometry("400x350")
+        self.geometry("400x550")
         self.resizable(False, False)
+
+        # Task tracking variables
+        self.active_task_name = None
+        self.task_work_secs = 0
+        self.task_break_secs = 0
 
         # Initialize Timer
         self.timer = PomodoroTimer(self.update_ui)
@@ -28,15 +36,15 @@ class PomodoroApp(ctk.CTk):
     def setup_ui(self):
         # State display (Work, Break, etc)
         self.state_label = ctk.CTkLabel(self, text="Trabajo", font=ctk.CTkFont(size=24, weight="bold"))
-        self.state_label.pack(pady=(30, 10))
+        self.state_label.pack(pady=(20, 5))
 
         # Main Clock display
         self.clock_label = ctk.CTkLabel(self, text="25:00", font=ctk.CTkFont(size=80, weight="bold"))
-        self.clock_label.pack(pady=10)
+        self.clock_label.pack(pady=5)
 
         # Work Duration Selector
         self.time_selector_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.time_selector_frame.pack(pady=10)
+        self.time_selector_frame.pack(pady=5)
         
         ctk.CTkLabel(self.time_selector_frame, text="Tiempo (min):").pack(side="left", padx=5)
         self.time_var = ctk.StringVar(value="25")
@@ -50,7 +58,7 @@ class PomodoroApp(ctk.CTk):
 
         # Controls
         self.buttons_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.buttons_frame.pack(pady=20)
+        self.buttons_frame.pack(pady=10)
 
         self.start_btn = ctk.CTkButton(self.buttons_frame, text="Iniciar", command=self.start_timer, width=80)
         self.start_btn.pack(side="left", padx=10)
@@ -61,10 +69,44 @@ class PomodoroApp(ctk.CTk):
         self.reset_btn = ctk.CTkButton(self.buttons_frame, text="Reiniciar", command=self.reset_timer, width=80)
         self.reset_btn.pack(side="left", padx=10)
 
+        # --- Task Tracking UI ---
+        # Separator line
+        self.separator = ctk.CTkFrame(self, height=2)
+        self.separator.pack(fill="x", padx=20, pady=15)
+        
+        self.task_frame = ctk.CTkFrame(self)
+        self.task_frame.pack(pady=5, padx=20, fill="x")
+
+        self.task_status_label = ctk.CTkLabel(self.task_frame, text="Sin tarea activa", font=ctk.CTkFont(weight="bold"))
+        self.task_status_label.pack(pady=(10, 5))
+
+        self.task_entry = ctk.CTkEntry(self.task_frame, placeholder_text="Nombre de la tarea", width=250)
+        self.task_entry.pack(pady=5)
+
+        self.task_buttons_frame = ctk.CTkFrame(self.task_frame, fg_color="transparent")
+        self.task_buttons_frame.pack(pady=(5, 10))
+
+        self.action_task_btn = ctk.CTkButton(self.task_buttons_frame, text="Iniciar Tarea", command=self.toggle_task, width=100)
+        self.action_task_btn.pack(side="left", padx=5)
+
+        self.edit_task_btn = ctk.CTkButton(self.task_buttons_frame, text="Editar", command=self.edit_task, width=60, state="disabled")
+        self.edit_task_btn.pack(side="left", padx=5)
+
+        self.finish_task_btn = ctk.CTkButton(self.task_buttons_frame, text="Finalizar", command=self.finish_task, width=80, state="disabled")
+        self.finish_task_btn.pack(side="left", padx=5)
+
+
     def on_time_change(self, value):
         self.timer.set_work_duration(int(value))
 
     def update_ui(self, remaining_time, state):
+        # Tracker logic
+        if self.active_task_name is not None and self.timer.is_running and not self.timer.is_paused:
+            if state == "Work":
+                self.task_work_secs += 1
+            else:
+                self.task_break_secs += 1
+
         mins, secs = divmod(remaining_time, 60)
         timeformat = '{:02d}:{:02d}'.format(mins, secs)
         
@@ -100,6 +142,73 @@ class PomodoroApp(ctk.CTk):
         elif state == "Long Break":
             self.state_label.configure(text_color="#90EE90") # Light Green
 
+    # --- Task Logic Methods ---
+    def toggle_task(self):
+        task_name = self.task_entry.get().strip()
+        if not task_name:
+            import tkinter.messagebox as messagebox
+            messagebox.showwarning("Atención", "Por favor ingresa un nombre para la tarea.")
+            return
+
+        self.active_task_name = task_name
+        self.task_status_label.configure(text=f"Tarea Activa: {self.active_task_name}", text_color="#ADD8E6")
+        self.task_entry.configure(state="disabled")
+        
+        self.action_task_btn.configure(state="disabled")
+        self.edit_task_btn.configure(state="normal")
+        self.finish_task_btn.configure(state="normal")
+
+    def edit_task(self):
+        self.task_entry.configure(state="normal")
+        self.task_entry.focus()
+        self.action_task_btn.configure(state="normal", text="Guardar")
+        self.edit_task_btn.configure(state="disabled")
+
+    def finish_task(self):
+        if not self.active_task_name: return
+
+        # Calculate time
+        w_mins = self.task_work_secs // 60
+        b_mins = self.task_break_secs // 60
+
+        report_msg = (
+            f"Tarea: {self.active_task_name}\n"
+            f"Tiempo enfocado: {w_mins} min\n"
+            f"Tiempo de descanso: {b_mins} min"
+        )
+        
+        # Save to CSV
+        file_path = "historial_tareas.csv"
+        file_exists = os.path.isfile(file_path)
+        with open(file_path, mode='a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            if not file_exists:
+                writer.writerow(["Fecha", "Tarea", "Minutos Trabajo", "Minutos Descanso"])
+            writer.writerow([
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                self.active_task_name,
+                w_mins,
+                b_mins
+            ])
+
+        # Show popup
+        import tkinter.messagebox as messagebox
+        messagebox.showinfo("Reporte de Tarea", report_msg)
+
+        # Reset task state
+        self.active_task_name = None
+        self.task_work_secs = 0
+        self.task_break_secs = 0
+        
+        self.task_status_label.configure(text="Sin tarea activa", text_color="white")
+        self.task_entry.configure(state="normal")
+        self.task_entry.delete(0, 'end')
+        
+        self.action_task_btn.configure(state="normal", text="Iniciar Tarea")
+        self.edit_task_btn.configure(state="disabled")
+        self.finish_task_btn.configure(state="disabled")
+
+    # --- Timer Thread Controls ---
     def run_timer(self):
         while True:
             self.timer.tick()
