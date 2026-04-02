@@ -4,6 +4,7 @@ import time
 import winsound
 import csv
 import os
+import sys
 from datetime import datetime
 from timer_logic import PomodoroTimer
 
@@ -143,6 +144,9 @@ class PomodoroApp(ctk.CTk):
         self.title("Pomodoro-Portable")
         self.geometry("400x580")
         self.resizable(False, False)
+        
+        self.app_running = True
+        self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
         # Task tracking variables
         self.active_task_name = None
@@ -229,6 +233,9 @@ class PomodoroApp(ctk.CTk):
         self.timer.set_work_duration(int(value))
 
     def update_ui(self, remaining_time, state):
+        if not getattr(self, 'app_running', True):
+            return
+            
         # Tracker logic
         if self.active_task_name is not None and self.timer.is_running and not self.timer.is_paused:
             if state == "Work":
@@ -343,9 +350,15 @@ class PomodoroApp(ctk.CTk):
     def show_reports(self):
         ReportWindow(self)
 
+    def on_closing(self):
+        self.app_running = False
+        self.quit()
+        self.destroy()
+        sys.exit(0)
+
     # --- Timer Thread Controls ---
     def run_timer(self):
-        while True:
+        while getattr(self, 'app_running', True):
             self.timer.tick()
             time.sleep(1)
 
