@@ -19,9 +19,11 @@ class PomodoroTimer:
             self.callback(self.current_time, self.current_state)
 
     def start(self):
+        if self.current_time == 0:
+            self.transition_state()
         if not self.is_running:
             self.is_running = True
-            self.is_paused = False
+        self.is_paused = False
 
     def pause(self):
         if self.is_running:
@@ -40,8 +42,9 @@ class PomodoroTimer:
             if self.current_time > 0:
                 self.current_time -= 1
                 self.callback(self.current_time, self.current_state)
-            else:
-                self.transition_state()
+                # Auto pause when time is up
+                if self.current_time == 0:
+                    self.is_paused = True
 
     def transition_state(self):
         if self.current_state == "Work":

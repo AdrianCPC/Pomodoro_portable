@@ -1,7 +1,7 @@
 import customtkinter as ctk
 import threading
 import time
-import winsound
+import pygame
 import csv
 import os
 import sys
@@ -247,11 +247,15 @@ class PomodoroApp(ctk.CTk):
         timeformat = '{:02d}:{:02d}'.format(mins, secs)
         
         if remaining_time == 0:
-            # Alarma: secuencia de 3 pitidos de 500ms (aprox 2 segundos total) a 800Hz
+            # Reproducir sonido ring.mp3
             def _play_alarm():
-                for _ in range(3):
-                    winsound.Beep(800, 500)
-                    time.sleep(0.1)
+                try:
+                    if not pygame.mixer.get_init():
+                        pygame.mixer.init()
+                    pygame.mixer.music.load("ring.mp3")
+                    pygame.mixer.music.play()
+                except Exception as e:
+                    print(f"Error reproduciendo audio: {e}")
             threading.Thread(target=_play_alarm, daemon=True).start()
             
         # Use after() to schedule UI update on the main thread
@@ -277,6 +281,11 @@ class PomodoroApp(ctk.CTk):
             self.state_label.configure(text_color="#ADD8E6") # Light Blue
         elif state == "Long Break":
             self.state_label.configure(text_color="#90EE90") # Light Green
+            
+        if timeformat == "00:00":
+            self.pause_btn.configure(text="Pausar")
+            import tkinter.messagebox as messagebox
+            messagebox.showinfo("¡Tiempo completado!", f"El ciclo de {display_state} ha terminado.\nInicia manualmente para continuar.")
 
     # --- Task Logic Methods ---
     def toggle_task(self):
