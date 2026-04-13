@@ -163,17 +163,18 @@ class PomodoroApp(ctk.CTk):
         self.setup_ui()
 
     def setup_ui(self):
-        # State display (Work, Break, etc)
-        self.state_label = ctk.CTkLabel(self, text="Trabajo", font=ctk.CTkFont(size=24, weight="bold"))
-        self.state_label.pack(pady=(20, 5))
+        # Top right/left buttons frame
+        self.top_frame = ctk.CTkFrame(self, fg_color="transparent", height=40)
+        self.top_frame.pack(fill="x", padx=15, pady=(10, 0))
 
-        # Main Clock display
-        self.clock_label = ctk.CTkLabel(self, text="25:00", font=ctk.CTkFont(size=80, weight="bold"))
-        self.clock_label.pack(pady=5)
+        self.gear_btn = ctk.CTkButton(self.top_frame, text="⚙️", width=30, height=30, 
+                                      corner_radius=15, fg_color="transparent", 
+                                      hover_color="#333333", font=("Arial", 20),
+                                      command=self.toggle_settings)
+        self.gear_btn.pack(side="left")
 
-        # Work Duration Selector
+        # Time selector (hidden by default)
         self.time_selector_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.time_selector_frame.pack(pady=5)
         
         ctk.CTkLabel(self.time_selector_frame, text="Tiempo (min):").pack(side="left", padx=5)
         self.time_var = ctk.StringVar(value="25")
@@ -185,18 +186,46 @@ class PomodoroApp(ctk.CTk):
         )
         self.time_dropdown.pack(side="left", padx=5)
 
-        # Controls
+        # Circular Timer Canvas
+        bg_color = self._get_appearance_mode() # get current bg color
+        if bg_color == "Dark":
+            canvas_bg = "#242424" # Default CTk dark background
+        else:
+            canvas_bg = "#EBEBEB"
+            
+        self.canvas = ctk.CTkCanvas(self, width=280, height=280, bg=canvas_bg, highlightthickness=0)
+        self.canvas.pack(pady=(10, 20))
+        
+        # Background track
+        self.arc_bg = self.canvas.create_oval(20, 20, 260, 260, outline="#333333", width=12)
+        
+        # Progress track
+        self.arc_fg = self.canvas.create_arc(20, 20, 260, 260, start=90, extent=-360, style="arc", outline="#f5680c", width=12)
+        
+        # Inner text elements
+        self.icon_text = self.canvas.create_text(140, 70, text="🍅", font=("Arial", 36))
+        self.time_text = self.canvas.create_text(140, 130, text="25:00", font=("Arial", 56, "bold"), fill="white")
+        self.status_text = self.canvas.create_text(140, 185, text="FOCUS", font=("Arial", 16, "bold"), fill="#aaaaaa")
+        self.play_icon = self.canvas.create_text(140, 230, text="▶", font=("Arial", 30), fill="white")
+        
+        # Bind play/pause to the icon and the text
+        self.canvas.tag_bind(self.play_icon, "<Button-1>", self.on_play_pause_click)
+        self.canvas.tag_bind(self.time_text, "<Button-1>", self.on_play_pause_click)
+
+        # Transition button (Pomodoro/Break)
         self.buttons_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.buttons_frame.pack(pady=10)
+        self.buttons_frame.pack(pady=0)
+        self.transition_btn = ctk.CTkButton(self.buttons_frame, text="SKIP", width=140, height=40, corner_radius=20, 
+                                            fg_color="#333333", hover_color="#444444", font=("Arial", 14, "bold"),
+                                            command=self.skip_state)
+        self.transition_btn.pack()
 
-        self.start_btn = ctk.CTkButton(self.buttons_frame, text="Iniciar", command=self.start_timer, width=80)
-        self.start_btn.pack(side="left", padx=10)
-
-        self.pause_btn = ctk.CTkButton(self.buttons_frame, text="Pausar", command=self.pause_timer, width=80)
-        self.pause_btn.pack(side="left", padx=10)
-
-        self.reset_btn = ctk.CTkButton(self.buttons_frame, text="Reiniciar", command=self.reset_timer, width=80)
-        self.reset_btn.pack(side="left", padx=10)
+        # Reset button moved to top right
+        self.reset_btn = ctk.CTkButton(self.top_frame, text="🔄", width=30, height=30, 
+                                      corner_radius=15, fg_color="transparent", 
+                                      hover_color="#333333", font=("Arial", 20),
+                                      command=self.reset_timer)
+        self.reset_btn.pack(side="right")
 
         # --- Task Tracking UI ---
         # Separator line
@@ -228,6 +257,27 @@ class PomodoroApp(ctk.CTk):
         self.report_btn = ctk.CTkButton(self.task_frame, text="Ver Reportes (Gráficos)", fg_color="#4158D0", command=self.show_reports)
         self.report_btn.pack(pady=(5, 15))
 
+
+    def _get_appearance_mode(self):
+        return ctk.get_appearance_mode()
+
+    def toggle_settings(self):
+        if self.time_selector_frame.winfo_ismapped():
+            self.time_selector_frame.pack_forget()
+        else:
+            # Place it right below the top frame
+            self.time_selector_frame.pack(after=self.top_frame, pady=5)
+
+    def on_play_pause_click(self, event):
+        if self.timer.is_running and not self.timer.is_paused:
+            self.pause_timer()
+        else:
+            self.start_timer()
+
+    def skip_state(self):
+        # Manually transition state via timer logic and start automatically
+        self.timer.transition_state()
+        self.timer.start()
 
     def on_time_change(self, value):
         self.timer.set_work_duration(int(value))
@@ -262,30 +312,55 @@ class PomodoroApp(ctk.CTk):
         self.after(0, self._apply_ui_update, timeformat, state)
 
     def _apply_ui_update(self, timeformat, state):
-        self.clock_label.configure(text=timeformat)
+        self.canvas.itemconfig(self.time_text, text=timeformat)
         
-        # Translate internal states to Spanish
-        state_translations = {
-            "Work": "Trabajo",
-            "Short Break": "Descanso Corto",
-            "Long Break": "Descanso Largo"
-        }
+        # Toggle play/pause icon based on pause state
+        if not self.timer.is_running or self.timer.is_paused:
+            self.canvas.itemconfig(self.play_icon, text="▶")
+        else:
+            self.canvas.itemconfig(self.play_icon, text="⏸")
         
-        display_state = state_translations.get(state, state)
-        self.state_label.configure(text=display_state)
-        
-        # Color code states
+        # Calculate progress and colors based on state
+        total_time = 0
         if state == "Work":
-            self.state_label.configure(text_color="white")
+            total_time = self.timer.work_duration
+            color = "#f5680c" # Orange/Red
+            icon = "🍅"
+            status = "FOCUS"
+            skip_text = "BREAK"
         elif state == "Short Break":
-            self.state_label.configure(text_color="#ADD8E6") # Light Blue
+            total_time = self.timer.short_break
+            color = "#3d85c6" # Blue
+            icon = "☕"
+            status = "RELAX"
+            skip_text = "POMODORO"
         elif state == "Long Break":
-            self.state_label.configure(text_color="#90EE90") # Light Green
+            total_time = self.timer.long_break
+            color = "#90EE90" # Green for long break
+            icon = "☕"
+            status = "LONG RELAX"
+            skip_text = "POMODORO"
+            
+        self.canvas.itemconfig(self.icon_text, text=icon)
+        self.canvas.itemconfig(self.status_text, text=status)
+        self.canvas.itemconfig(self.arc_fg, outline=color)
+        self.transition_btn.configure(text=skip_text)
+        
+        # Arc progress
+        if total_time > 0:
+            remaining = self.timer.current_time
+            progress = remaining / total_time
+            # Keep extent bounded
+            extent = max(-360.0, min(0.0, -360.0 * progress))
+            if extent == 0 and remaining > 0:
+                extent = -1 # Small visual safety
+            self.canvas.itemconfig(self.arc_fg, extent=extent)
             
         if timeformat == "00:00":
-            self.pause_btn.configure(text="Pausar")
+            self.canvas.itemconfig(self.play_icon, text="▶")
             import tkinter.messagebox as messagebox
-            messagebox.showinfo("¡Tiempo completado!", f"El ciclo de {display_state} ha terminado.\nInicia manualmente para continuar.")
+            display_state = { "Work": "Trabajo", "Short Break": "Descanso Corto", "Long Break": "Descanso Largo" }.get(state, state)
+            messagebox.showinfo("¡Tiempo completado!", f"El ciclo de {display_state} ha terminado.\nInicia manualmente para continuar o salta a la siguiente fase.")
 
     # --- Task Logic Methods ---
     def toggle_task(self):
@@ -376,14 +451,13 @@ class PomodoroApp(ctk.CTk):
 
     def pause_timer(self):
         self.timer.pause()
-        if self.timer.is_paused:
-            self.pause_btn.configure(text="Reanudar")
-        else:
-            self.pause_btn.configure(text="Pausar")
+        mins, secs = divmod(self.timer.current_time, 60)
+        self._apply_ui_update(f"{mins:02d}:{secs:02d}", self.timer.current_state)
 
     def reset_timer(self):
         self.timer.reset()
-        self.pause_btn.configure(text="Pausar")
+        mins, secs = divmod(self.timer.current_time, 60)
+        self._apply_ui_update(f"{mins:02d}:{secs:02d}", self.timer.current_state)
 
 if __name__ == "__main__":
     app = PomodoroApp()
