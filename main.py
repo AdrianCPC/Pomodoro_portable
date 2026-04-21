@@ -5,12 +5,10 @@ import pygame
 import csv
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from timer_logic import PomodoroTimer
 
-# Matplotlib
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import matplotlib.pyplot as plt
+
 
 # Configure CustomTkinter
 ctk.set_appearance_mode("dark")
@@ -20,39 +18,20 @@ class ReportWindow(ctk.CTkToplevel):
     def __init__(self, parent):
         super().__init__(parent)
         self.title("Reportes de Trabajo")
-        self.geometry("600x450")
+        self.geometry("520x580")
+        self.configure(fg_color="#0a0a0a")
         
         # Prevent opening multiple report windows by keeping focus
         self.grab_set()
+        
+        # Configurar colores para estética premium
+        self.ACCENT_COLOR = "#8b5cf6" # Un tono morado/purpura agradable #7a2aff
+        self.TEXT_GRAY = "#a3a3a3"
+        self.GREEN_ARROW = "#22c55e"
+        self.RED_ARROW = "#ef4444"
 
-        self.filter_var = ctk.StringVar(value="Diario")
-        self.filter_seg_btn = ctk.CTkSegmentedButton(
-            self, 
-            values=["Diario", "Semanal", "Mensual"],
-            variable=self.filter_var,
-            command=self.update_chart
-        )
-        self.filter_seg_btn.pack(pady=20)
-        
-        self.chart_frame = ctk.CTkFrame(self)
-        self.chart_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
-        
-        self.figure, self.ax = plt.subplots(figsize=(6, 4))
-        # Style chart for dark mode
-        self.figure.patch.set_facecolor('#2b2b2b')
-        self.ax.set_facecolor('#2b2b2b')
-        self.ax.tick_params(colors='white')
-        self.ax.yaxis.label.set_color('white')
-        self.ax.xaxis.label.set_color('white')
-        self.ax.spines['bottom'].set_color('white')
-        self.ax.spines['top'].set_color('#2b2b2b')
-        self.ax.spines['right'].set_color('#2b2b2b')
-        self.ax.spines['left'].set_color('white')
-        
-        self.canvas = FigureCanvasTkAgg(self.figure, master=self.chart_frame)
-        self.canvas.get_tk_widget().pack(fill="both", expand=True)
-        
-        self.update_chart(self.filter_var.get())
+        self.setup_ui()
+        self.update_data("Hoy")
 
         # Bind closing to release grab
         self.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -60,7 +39,95 @@ class ReportWindow(ctk.CTkToplevel):
     def on_close(self):
         self.grab_release()
         self.destroy()
+
+    def setup_ui(self):
+        # Header "Estadísticas de Enfoque"
+        self.header_label = ctk.CTkLabel(self, text="Estadísticas de Enfoque", font=("Arial", 24, "bold"), text_color="white")
+        self.header_label.pack(anchor="w", padx=30, pady=(25, 15))
         
+        # Tabs
+        self.filter_var = ctk.StringVar(value="Hoy")
+        self.filter_seg_btn = ctk.CTkSegmentedButton(
+            self, 
+            values=["Hoy", "7 Días", "28 Días"],
+            variable=self.filter_var,
+            command=self.update_data,
+            selected_color=self.ACCENT_COLOR,
+            selected_hover_color="#7c3aed",
+            unselected_color="#18181b", # dark background for tabs
+            unselected_hover_color="#27272a",
+        )
+        self.filter_seg_btn.pack(anchor="w", padx=30, pady=(0, 25))
+        
+        # Stats container
+        self.stats_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.stats_frame.pack(fill="x", padx=30)
+        
+        self.stats_frame.grid_columnconfigure(0, weight=3)
+        self.stats_frame.grid_columnconfigure(1, weight=2)
+        self.stats_frame.grid_columnconfigure(2, weight=2)
+        self.stats_frame.grid_columnconfigure(3, weight=3)
+        
+        # Stat: Focus Time
+        f1 = ctk.CTkFrame(self.stats_frame, fg_color="transparent")
+        f1.grid(row=0, column=0, sticky="w")
+        ctk.CTkLabel(f1, text="⚡ TIEMPO ENFOQUE", font=("Arial", 10, "bold"), text_color=self.TEXT_GRAY).pack(anchor="w")
+        self.lbl_focus_time = ctk.CTkLabel(f1, text="0h 0m", font=("Arial", 22, "bold"), text_color="white")
+        self.lbl_focus_time.pack(anchor="w")
+        self.lbl_focus_comp = ctk.CTkLabel(f1, text="-- vs. ayer", font=("Arial", 10), text_color=self.TEXT_GRAY)
+        self.lbl_focus_comp.pack(anchor="w")
+        
+        line1 = ctk.CTkFrame(self.stats_frame, width=1, fg_color="#27272a")
+        line1.grid(row=0, column=0, sticky="e", pady=5)
+        
+        # Stat: Tasks
+        f2 = ctk.CTkFrame(self.stats_frame, fg_color="transparent")
+        f2.grid(row=0, column=1, padx=15, sticky="w")
+        ctk.CTkLabel(f2, text="✅ TAREAS", font=("Arial", 10, "bold"), text_color=self.TEXT_GRAY).pack(anchor="w")
+        self.lbl_tasks = ctk.CTkLabel(f2, text="0", font=("Arial", 22, "bold"), text_color="white")
+        self.lbl_tasks.pack(anchor="w")
+        ctk.CTkLabel(f2, text=" ", font=("Arial", 10)).pack() 
+        
+        line2 = ctk.CTkFrame(self.stats_frame, width=1, fg_color="#27272a")
+        line2.grid(row=0, column=1, sticky="e", pady=5)
+
+        # Stat: Sessions
+        f3 = ctk.CTkFrame(self.stats_frame, fg_color="transparent")
+        f3.grid(row=0, column=2, padx=15, sticky="w")
+        ctk.CTkLabel(f3, text="🎯 SESIONES", font=("Arial", 10, "bold"), text_color=self.TEXT_GRAY).pack(anchor="w")
+        self.lbl_sessions = ctk.CTkLabel(f3, text="0", font=("Arial", 22, "bold"), text_color="white")
+        self.lbl_sessions.pack(anchor="w")
+        ctk.CTkLabel(f3, text=" ", font=("Arial", 10)).pack() 
+        
+        line3 = ctk.CTkFrame(self.stats_frame, width=1, fg_color="#27272a")
+        line3.grid(row=0, column=2, sticky="e", pady=5)
+
+        # Stat: Break Time
+        f4 = ctk.CTkFrame(self.stats_frame, fg_color="transparent")
+        f4.grid(row=0, column=3, padx=15, sticky="w")
+        ctk.CTkLabel(f4, text="☕ DESCANSO", font=("Arial", 10, "bold"), text_color=self.TEXT_GRAY).pack(anchor="w")
+        self.lbl_break = ctk.CTkLabel(f4, text="0h 0m", font=("Arial", 22, "bold"), text_color="white")
+        self.lbl_break.pack(anchor="w")
+        ctk.CTkLabel(f4, text=" ", font=("Arial", 10)).pack() 
+        
+        # Horizontal Separator
+        sep = ctk.CTkFrame(self, height=1, fg_color="#27272a")
+        sep.pack(fill="x", padx=30, pady=25)
+        
+        # Subtitle
+        ctk.CTkLabel(self, text="Productividad Reciente", font=("Arial", 16, "bold"), text_color="white").pack(anchor="w", padx=30)
+        
+        # Canvas for custom bar chart
+        self.canvas_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.canvas_frame.pack(fill="both", expand=True, padx=30, pady=(10, 20))
+        
+        # To handle resize events safely, we bind Configure
+        self.canvas = ctk.CTkCanvas(self.canvas_frame, bg="#0a0a0a", highlightthickness=0)
+        self.canvas.pack(fill="both", expand=True)
+        self.canvas.bind("<Configure>", lambda e: self.draw_chart())
+        
+        self.current_chart_data = []
+
     def parse_data(self):
         data = []
         file_path = "historial_tareas.csv"
@@ -73,68 +140,173 @@ class ReportWindow(ctk.CTkToplevel):
                 try:
                     dt = datetime.strptime(row["Fecha"], "%Y-%m-%d %H:%M:%S")
                     work_mins = int(row["Minutos Trabajo"])
-                    data.append({"date": dt, "work_mins": work_mins})
+                    b_mins = int(row["Minutos Descanso"]) if "Minutos Descanso" in row else 0
+                    data.append({"date": dt, "work_mins": work_mins, "break_mins": b_mins})
                 except Exception:
                     continue
         return data
 
-    def update_chart(self, filter_type):
+    def update_data(self, filter_type):
         data = self.parse_data()
-        self.ax.clear()
+        now = datetime.now()
+        
+        # Helper to truncate time for date comparison
+        def day_start(dt): return dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        today = day_start(now)
+        
+        # Filters
+        if filter_type == "Hoy":
+            current_start = today
+            prev_start = today - timedelta(days=1)
+            prev_end = today
+            chart_days = 7 # We still show 7 days on chart for context
+        elif filter_type == "7 Días":
+            current_start = today - timedelta(days=6) # 7 days ending today
+            prev_start = today - timedelta(days=13)
+            prev_end = current_start
+            chart_days = 7
+        elif filter_type == "28 Días":
+            current_start = today - timedelta(days=27)
+            prev_start = today - timedelta(days=55)
+            prev_end = current_start
+            chart_days = 28 # For the chart we will group this differently
 
-        # Check if data exists
-        if not data:
-            self.ax.text(0.5, 0.5, 'No hay datos suficientes', color='white', ha='center')
-            self.canvas.draw()
-            return
+        curr_work = curr_tasks = curr_break = 0
+        prev_work = 0
 
-        # Simple aggregation dict
-        agg = {}
+        # Aggregation for stats
         for d in data:
             dt = d["date"]
-            val = d["work_mins"]
-            if filter_type == "Diario":
-                key = dt.strftime("%Y-%m-%d")
-            elif filter_type == "Semanal":
-                key = dt.strftime("%Y-W%W")
-            elif filter_type == "Mensual":
-                key = dt.strftime("%Y-%m")
-            
-            agg[key] = agg.get(key, 0) + val
+            if dt >= current_start:
+                curr_work += d["work_mins"]
+                curr_tasks += 1
+                curr_break += d["break_mins"]
+            elif prev_start <= dt < prev_end:
+                prev_work += d["work_mins"]
 
-        keys = sorted(agg.keys())
-        values = [agg[k] for k in keys]
+        # Update Top Stats text
+        def format_hm(total_mins):
+            h, m = divmod(total_mins, 60)
+            if h > 0: return f"{h}h {m}m"
+            return f"{m}m"
 
-        if filter_type == "Diario":
-            keys = keys[-7:]
-            values = values[-7:]
-            x_labels = [datetime.strptime(k, "%Y-%m-%d").strftime("%d %b") for k in keys]
-        elif filter_type == "Semanal":
-            keys = keys[-4:]
-            values = values[-4:]
-            x_labels = keys
-        elif filter_type == "Mensual":
-            keys = keys[-12:]
-            values = values[-12:]
-            x_labels = [datetime.strptime(k, "%Y-%m").strftime("%b '%y") for k in keys]
-            
-        # Draw bars
-        bars = self.ax.bar(x_labels, values, color='#1f538d') # ctk blue-ish
+        self.lbl_focus_time.configure(text=format_hm(curr_work))
+        self.lbl_tasks.configure(text=str(curr_tasks))
+        self.lbl_sessions.configure(text=str(curr_tasks))
+        self.lbl_break.configure(text=format_hm(curr_break))
         
-        # Add values on top of bars
-        for bar in bars:
-            height = bar.get_height()
-            self.ax.annotate(f'{height}',
-                xy=(bar.get_x() + bar.get_width() / 2, height),
-                xytext=(0, 3),  # 3 points vertical offset
-                textcoords="offset points",
-                ha='center', va='bottom', color='white')
+        # Percentage comparison
+        if prev_work == 0:
+            pct_text = "↑ --% vs previo"
+            color = self.TEXT_GRAY
+        else:
+            diff = curr_work - prev_work
+            pct = int((abs(diff) / prev_work) * 100)
+            if diff >= 0:
+                pct_text = f"↑ {pct}% vs previo"
+                color = self.GREEN_ARROW
+            else:
+                pct_text = f"↓ {pct}% vs previo"
+                color = self.RED_ARROW
+                
+        # Override specific label text if Hoy
+        if filter_type == "Hoy":
+            pct_text = pct_text.replace("previo", "ayer")
+            
+        self.lbl_focus_comp.configure(text=pct_text, text_color=color)
 
-        self.ax.set_ylabel("Minutos de Trabajo")
-        self.ax.set_title(f"Tiempo de Enfoque ({filter_type})", color='white')
-        self.figure.autofmt_xdate()
+        # Build Chart Data
+        self.current_chart_data = self.build_chart_data(data, filter_type, today)
+        self.draw_chart()
+
+    def build_chart_data(self, data, filter_type, today):
+        # We'll create a list of dicts: [{'label': 'Jan 8', 'value': 45}, ...]
+        chart_data = []
+        if filter_type in ["Hoy", "7 Días"]:
+            # Chart shows the last 7 days independently of it being "Hoy" or "7 Días"
+            for i in range(6, -1, -1):
+                target_day = today - timedelta(days=i)
+                label = target_day.strftime("%b %d")
+                
+                day_work = 0
+                for d in data:
+                    if d["date"].date() == target_day.date():
+                        day_work += d["work_mins"]
+                        
+                chart_data.append({"label": label, "value": day_work})
+        else:
+            # 28 days -> split into 4 weeks
+            for w in range(3, -1, -1):
+                w_start = today - timedelta(days=(w*7) + 6)
+                w_end = today - timedelta(days=(w*7))
+                
+                label = f"{w_start.strftime('%d')}-{w_end.strftime('%d %b')}"
+                
+                week_work = 0
+                for d in data:
+                    if w_start.date() <= d["date"].date() <= w_end.date():
+                        week_work += d["work_mins"]
+                
+                chart_data.append({"label": label, "value": week_work})
+                
+        return chart_data
+
+    def draw_chart(self):
+        self.canvas.delete("all")
+        if not self.current_chart_data: return
         
-        self.canvas.draw()
+        w = self.canvas.winfo_width()
+        h = self.canvas.winfo_height()
+        if w <= 1 or h <= 1: 
+            return # Canvas not initialized yet
+            
+        padding_top = 35
+        padding_bottom = 35
+        available_h = h - padding_top - padding_bottom
+        
+        # Add visual aesthetic adjustments to ensure text fits
+        max_val = max([d["value"] for d in self.current_chart_data])
+        if max_val == 0: max_val = 1 # avoid div by zero
+
+        n_bars = len(self.current_chart_data)
+        bar_width = min(35, w / (n_bars * 1.5))
+        
+        total_content_width = (n_bars * bar_width) + ((n_bars - 1) * bar_width * 0.8)
+        start_x = (w - total_content_width) / 2
+        
+        def format_hm(total_mins):
+            hrs, mins = divmod(total_mins, 60)
+            if hrs > 0: return f"{hrs}h {mins}m"
+            return f"{mins}m"
+        
+        for i, item in enumerate(self.current_chart_data):
+            x = start_x + (i * bar_width * 1.8)
+            val = item["value"]
+            
+            # Bar height proportional
+            bar_height = (val / max_val) * available_h
+            if val > 0 and bar_height < 10: bar_height = 10 # Minimum visible bump
+            
+            # For 0 value, draw a tiny line so it shows as a flat rounded pill
+            if val == 0: bar_height = 4
+            
+            y1 = padding_top + available_h
+            y0 = y1 - bar_height
+            
+            # Dibujar la barra con extremos redondeados (píldoras) usando create_line
+            # En tk, create_line puede tener un width muy grueso y capstyle=ROUND
+            self.canvas.create_line(x + bar_width/2, y1, x + bar_width/2, y0, 
+                                  fill=self.ACCENT_COLOR, width=bar_width, capstyle="round")
+                                  
+            # Etiqueta inferior (Fecha)
+            self.canvas.create_text(x + bar_width/2, y1 + bar_width/2 + 10, 
+                                  text=item["label"], fill=self.TEXT_GRAY, font=("Arial", 9))
+                                  
+            # Valor superior (Tiempo)
+            if val > 0:
+                self.canvas.create_text(x + bar_width/2, y0 - bar_width/2 - 10, 
+                                      text=format_hm(val), fill=self.TEXT_GRAY, font=("Arial", 10))
+
 
 
 class PomodoroApp(ctk.CTk):
