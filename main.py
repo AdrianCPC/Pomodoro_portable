@@ -314,7 +314,7 @@ class PomodoroApp(ctk.CTk):
         super().__init__()
 
         self.title("Pomodoro-Portable")
-        self.geometry("400x580")
+        self.geometry("400x650")
         self.resizable(False, False)
         
         self.app_running = True
@@ -401,33 +401,42 @@ class PomodoroApp(ctk.CTk):
 
         # --- Task Tracking UI ---
         # Separator line
-        self.separator = ctk.CTkFrame(self, height=2)
+        self.separator = ctk.CTkFrame(self, height=2, fg_color="#2a2a2a")
         self.separator.pack(fill="x", padx=20, pady=10)
         
-        self.task_frame = ctk.CTkFrame(self)
+        self.task_frame = ctk.CTkFrame(self, fg_color="#1c1c1e", corner_radius=15)
         self.task_frame.pack(pady=5, padx=20, fill="x")
 
-        self.task_status_label = ctk.CTkLabel(self.task_frame, text="Sin tarea activa", font=ctk.CTkFont(weight="bold"))
-        self.task_status_label.pack(pady=(10, 5))
+        self.task_status_label = ctk.CTkLabel(self.task_frame, text="Sin tarea activa", font=("Arial", 13, "bold"), text_color="#a3a3a3")
+        self.task_status_label.pack(pady=(12, 5))
 
-        self.task_entry = ctk.CTkEntry(self.task_frame, placeholder_text="Nombre de la tarea", width=250)
-        self.task_entry.pack(pady=5)
+        self.task_entry = ctk.CTkEntry(self.task_frame, placeholder_text="Nombre de la tarea", width=250, height=35, 
+                                       corner_radius=10, border_width=1, border_color="#333333", fg_color="#2b2b2b")
+        self.task_entry.pack(pady=(0, 10))
 
         self.task_buttons_frame = ctk.CTkFrame(self.task_frame, fg_color="transparent")
-        self.task_buttons_frame.pack(pady=(5, 5))
+        self.task_buttons_frame.pack(pady=(0, 5))
 
-        self.action_task_btn = ctk.CTkButton(self.task_buttons_frame, text="Iniciar Tarea", command=self.toggle_task, width=90)
+        self.action_task_btn = ctk.CTkButton(self.task_buttons_frame, text="Iniciar Tarea", command=self.toggle_task, 
+                                             width=90, height=35, corner_radius=20, fg_color="#333333", 
+                                             hover_color="#444444", font=("Arial", 12, "bold"))
         self.action_task_btn.pack(side="left", padx=5)
 
-        self.edit_task_btn = ctk.CTkButton(self.task_buttons_frame, text="Editar", command=self.edit_task, width=50, state="disabled")
+        self.edit_task_btn = ctk.CTkButton(self.task_buttons_frame, text="Editar", command=self.edit_task, 
+                                           width=60, height=35, corner_radius=20, fg_color="#333333", 
+                                           hover_color="#444444", font=("Arial", 12, "bold"), state="disabled")
         self.edit_task_btn.pack(side="left", padx=5)
 
-        self.finish_task_btn = ctk.CTkButton(self.task_buttons_frame, text="Finalizar", command=self.finish_task, width=80, state="disabled")
+        self.finish_task_btn = ctk.CTkButton(self.task_buttons_frame, text="Finalizar", command=self.finish_task, 
+                                             width=80, height=35, corner_radius=20, fg_color="#333333", 
+                                             hover_color="#444444", font=("Arial", 12, "bold"), state="disabled")
         self.finish_task_btn.pack(side="left", padx=5)
 
         # Report Button
-        self.report_btn = ctk.CTkButton(self.task_frame, text="Ver Reportes (Gráficos)", fg_color="#4158D0", command=self.show_reports)
-        self.report_btn.pack(pady=(5, 15))
+        self.report_btn = ctk.CTkButton(self.task_frame, text="Ver Reportes (Gráficos)", command=self.show_reports,
+                                        width=200, height=35, corner_radius=20, fg_color="#4158D0", 
+                                        hover_color="#3244a8", font=("Arial", 12, "bold"))
+        self.report_btn.pack(pady=(10, 15))
 
 
     def _get_appearance_mode(self):
@@ -595,7 +604,7 @@ class PomodoroApp(ctk.CTk):
         self.task_work_secs = 0
         self.task_break_secs = 0
         
-        self.task_status_label.configure(text="Sin tarea activa", text_color="white")
+        self.task_status_label.configure(text="Sin tarea activa", text_color="#a3a3a3")
         self.task_entry.configure(state="normal")
         self.task_entry.delete(0, 'end')
         
